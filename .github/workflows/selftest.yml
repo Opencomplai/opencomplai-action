@@ -1,0 +1,78 @@
+name: selftest
+
+# Runs this Action over four fictional systems, one per gate outcome, and checks each exit code.
+# The CLI is the pinned PyPI release in action.yml, so a green run means the published pair works.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: ${{ matrix.name }} exits ${{ matrix.expect }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: prohibited, expect: "3", args: "--repo-root test/fixtures/prohibited"}
+          - {name: trap, expect: "4", args: "--repo-root test/fixtures/trap --change-context model_retrain"}
+          - {name: high-risk, expect: "1", args: "--repo-root test/fixtures/high-risk"}
+          - {name: limited, expect: "0", args: "--repo-root test/fixtures/limited"}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Run the Action
+        id: gate
+        uses: ./
+        with:
+          manifest: test/fixtures/${{ matrix.name }}/system-manifest.json
+          args: ${{ matrix.args }}
+          comment: "false"
+          fail-on-error: "false"
+          upload-artifact: "true"
+          artifact-name: selftest-${{ matrix.name }}
+
+      - name: Assert exit code and summary
+        env:
+          EXPECT: ${{ matrix.expect }}
+          NAME: ${{ matrix.name }}
+          CODE: ${{ steps.gate.outputs.exit-code }}
+          SUMMARY: ${{ steps.gate.outputs.summary-file }}
+          ARTIFACT: ${{ steps.gate.outputs.artifact-file }}
+        run: |
+          set -euo pipefail
+          test "$CODE" = "$EXPECT" || { echo "::error::$NAME exited $CODE, expected $EXPECT"; exit 1; }
+          test -s "$SUMMARY"
+          test -s "$ARTIFACT"
+          grep -q '"result"' "$ARTIFACT"
+          grep -q '<!-- opencomplai-gate -->' "$SUMMARY"
+
+  fail-on-error:
+    name: fail-on-error fails the job
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Run the Action on a prohibited system
+        id: gate
+        continue-on-error: true
+        uses: ./
+        with:
+          manifest: test/fixtures/prohibited/system-manifest.json
+          args: --repo-root test/fixtures/prohibited
+          comment: "false"
+          upload-artifact: "false"
+
+      - name: The step must have failed
+        env:
+          OUTCOME: ${{ steps.gate.outcome }}
+        run: test "$OUTCOME" = failure

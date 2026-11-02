@@ -1,0 +1,26 @@
+name: release
+
+# When a release is published, point the floating major tag (for example v1) at it.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  move-major-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Move the major tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v([0-9]+)\.[0-9]+\.[0-9]+$ ]] || { echo "::error::$TAG is not vMAJOR.MINOR.PATCH"; exit 1; }
+          major="v${BASH_REMATCH[1]}"
+          git tag -f "$major" "$TAG"
+          git push --force origin "refs/tags/$major"
