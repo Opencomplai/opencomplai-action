@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2
+
+Points the Action at opencomplai 0.16.0.
+
+- Runs `opencomplai check` through `uvx`, pinned to `opencomplai==0.16.0`.
+
 ## 1.0.1
 
 Points the Action at opencomplai 0.15.0.
